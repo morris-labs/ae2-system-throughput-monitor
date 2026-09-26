@@ -1,25 +1,85 @@
 package dev.morrislabs.ae2throughput.part;
 
 import appeng.api.networking.GridFlags;
+import appeng.api.networking.IGridNode;
+import appeng.api.networking.IStackWatcher;
+import appeng.api.networking.storage.IStorageWatcherNode;
+import appeng.api.networking.ticking.IGridTickable;
+import appeng.api.networking.ticking.TickRateModulation;
+import appeng.api.networking.ticking.TickingRequest;
 import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartItem;
+import appeng.api.stacks.AEKey;
 import appeng.parts.AEBasePart;
 
 /**
- * Cable-face part that tracks every item flowing through the attached AE2 network.
- * Phase 1: skeleton that attaches to a cable and joins the grid.
+ * Cable-face part that tracks every item flowing through the attached AE2 network
+ * and accumulates produce/consume rates using a rolling average window.
  */
-public class ThroughputMonitorPart extends AEBasePart {
+public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
+
+    static final int DEFAULT_WINDOW_SIZE = 10;
+    static final int DEFAULT_SAMPLE_PERIOD_TICKS = 20;
+
+    private final FlowTracker tracker;
+    private int samplePeriodTicks;
 
     public ThroughputMonitorPart(IPartItem<?> partItem) {
         super(partItem);
-        getMainNode().setIdlePowerUsage(1.0 / 2.0);
-        getMainNode().setFlags(GridFlags.REQUIRE_CHANNEL);
+
+        this.samplePeriodTicks = DEFAULT_SAMPLE_PERIOD_TICKS;
+        this.tracker = new FlowTracker(DEFAULT_WINDOW_SIZE);
+
+        getMainNode()
+                .setIdlePowerUsage(1.0 / 2.0)
+                .setFlags(GridFlags.REQUIRE_CHANNEL)
+                .addService(IGridTickable.class, this)
+                .addService(IStorageWatcherNode.class, new IStorageWatcherNode() {
+                    @Override
+                    public void updateWatcher(IStackWatcher newWatcher) {
+                        newWatcher.setWatchAll(true);
+                    }
+
+                    @Override
+                    public void onStackChange(AEKey what, long amount) {
+                        tracker.onStackChange(what, amount);
+                    }
+                });
     }
+
+    // --- IGridTickable ---
+
+    @Override
+    public TickingRequest getTickingRequest(IGridNode node) {
+        return new TickingRequest(samplePeriodTicks, samplePeriodTicks, false);
+    }
+
+    @Override
+    public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
+        tracker.pushSample();
+        // Phase 4: broadcast tracker.getAverages() to open menus here.
+        return TickRateModulation.SAME;
+    }
+
+    // --- Geometry ---
 
     @Override
     public void getBoxes(IPartCollisionHelper bch) {
         bch.addBox(2, 2, 14, 14, 14, 16);
         bch.addBox(4, 4, 13, 12, 12, 14);
+    }
+
+    // --- Accessors for Phase 4+ ---
+
+    public FlowTracker getTracker() {
+        return tracker;
+    }
+
+    public int getSamplePeriodTicks() {
+        return samplePeriodTicks;
+    }
+
+    public void setSamplePeriodTicks(int ticks) {
+        this.samplePeriodTicks = Math.max(1, Math.min(100, ticks));
     }
 }

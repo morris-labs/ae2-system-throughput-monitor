@@ -1,0 +1,151 @@
+package dev.morrislabs.ae2throughput.part;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import appeng.api.stacks.AEKey;
+
+/**
+ * Tracks per-key produce/consume flow over a rolling window of samples.
+ *
+ * <p>Call {@link #onStackChange} on every storage-watcher callback. Call {@link #pushSample}
+ * once per sample period to commit the accumulated deltas into the rolling window. Call
+ * {@link #getAverages} to read the current smoothed rates.
+ *
+ * <p>The unit returned by {@link #getAverages} is items-per-sample-period. Callers
+ * multiply by {@code (20 / samplePeriodTicks)} to convert to per-second.
+ */
+public class FlowTracker {
+
+    private int windowSize;
+
+    /** Last amount observed for each key. Keys absent here are first-time observations. */
+    private final Map<AEKey, Long> lastSeen = new HashMap<>();
+
+    /** Accumulated produced/consumed since the last {@link #pushSample} call. Index 0 = produced, 1 = consumed. */
+    private final Map<AEKey, long[]> pending = new HashMap<>();
+
+    /** Circular buffer of [produced, consumed] pairs per key. */
+    private final Map<AEKey, long[][]> windows = new HashMap<>();
+
+    /** Current write head per key in the circular buffer. */
+    private final Map<AEKey, Integer> heads = new HashMap<>();
+
+    public FlowTracker(int windowSize) {
+        this.windowSize = Math.max(1, windowSize);
+    }
+
+    /**
+     * Records a storage-watcher callback. Compares against the last known amount to
+     * separate produced (amount rose) from consumed (amount fell) without losing signal
+     * when opposing flows cancel each other out.
+     */
+    public void onStackChange(AEKey what, long newAmount) {
+        Long prev = lastSeen.put(what, newAmount);
+        if (prev == null) {
+            return; // First observation -- no baseline to diff against.
+        }
+        if (newAmount > prev) {
+            long[] acc = pending.computeIfAbsent(what, k -> new long[2]);
+            acc[0] += newAmount - prev;
+        } else if (newAmount < prev) {
+            long[] acc = pending.computeIfAbsent(what, k -> new long[2]);
+            acc[1] += prev - newAmount;
+        }
+    }
+
+    /**
+     * Commits the accumulated deltas into the rolling window and clears the pending
+     * accumulators. Call this once per sample period.
+     */
+    public void pushSample() {
+        // Write accumulated data (or zeros for keys already in a window but idle this period).
+        for (AEKey key : allTrackedKeys()) {
+            long[] acc = pending.get(key);
+            long produced = acc != null ? acc[0] : 0;
+            long consumed = acc != null ? acc[1] : 0;
+
+            long[][] window = windows.computeIfAbsent(key, k -> new long[windowSize][2]);
+            int head = heads.getOrDefault(key, 0);
+            window[head][0] = produced;
+            window[head][1] = consumed;
+            heads.put(key, (head + 1) % windowSize);
+        }
+
+        pending.clear();
+
+        // Prune keys whose window has gone entirely to zero (flow stopped long enough ago).
+        pruneZeroWindows();
+    }
+
+    private void pruneZeroWindows() {
+        List<AEKey> toRemove = new ArrayList<>();
+        for (var entry : windows.entrySet()) {
+            long[][] window = entry.getValue();
+            boolean anyNonZero = false;
+            for (long[] sample : window) {
+                if (sample[0] != 0 || sample[1] != 0) {
+                    anyNonZero = true;
+                    break;
+                }
+            }
+            if (!anyNonZero) {
+                toRemove.add(entry.getKey());
+            }
+        }
+        for (AEKey key : toRemove) {
+            windows.remove(key);
+            heads.remove(key);
+        }
+    }
+
+    /**
+     * Returns the rolling average for every key that has non-zero flow.
+     * The value is in items-per-sample-period -- multiply by {@code (20 / periodTicks)}
+     * to convert to items-per-second.
+     */
+    public Map<AEKey, FlowSample> getAverages() {
+        Map<AEKey, FlowSample> result = new HashMap<>();
+        for (var entry : windows.entrySet()) {
+            long[][] window = entry.getValue();
+            long totalProduced = 0;
+            long totalConsumed = 0;
+            for (long[] sample : window) {
+                totalProduced += sample[0];
+                totalConsumed += sample[1];
+            }
+            long avgProduced = totalProduced / windowSize;
+            long avgConsumed = totalConsumed / windowSize;
+            if (avgProduced > 0 || avgConsumed > 0) {
+                result.put(entry.getKey(), new FlowSample(avgProduced, avgConsumed));
+            }
+        }
+        return result;
+    }
+
+    /** Keys that either have pending data this period or already have a window (tracking ongoing). */
+    private Iterable<AEKey> allTrackedKeys() {
+        if (windows.isEmpty()) return pending.keySet();
+        if (pending.isEmpty()) return windows.keySet();
+
+        var all = new java.util.HashSet<AEKey>(windows.keySet());
+        all.addAll(pending.keySet());
+        return all;
+    }
+
+    public int getWindowSize() {
+        return windowSize;
+    }
+
+    /**
+     * Changes the window size. Clears all existing window data because the buffer
+     * dimensions change.
+     */
+    public void setWindowSize(int windowSize) {
+        this.windowSize = Math.max(1, windowSize);
+        windows.clear();
+        heads.clear();
+    }
+}
