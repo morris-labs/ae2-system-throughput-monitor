@@ -1,5 +1,7 @@
 package dev.morrislabs.ae2throughput;
 
+import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
+import dev.morrislabs.ae2throughput.network.ModNetwork;
 import dev.morrislabs.ae2throughput.registry.ModCreativeTabs;
 import dev.morrislabs.ae2throughput.registry.ModParts;
 
@@ -14,6 +16,11 @@ public final class Ae2ThroughputMod {
     public Ae2ThroughputMod(IEventBus modEventBus) {
         ModParts.PARTS.register(modEventBus);
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+        modEventBus.addListener(ModNetwork::register);
+        // Load ThroughputMonitorMenu now so its TYPE static field is queued in
+        // AE2's InitMenuTypes before RegisterEvent fires for the MENU registry.
+        @SuppressWarnings("unused")
+        var ignored = ThroughputMonitorMenu.TYPE;
     }
 
     public static ResourceLocation makeId(String path) {

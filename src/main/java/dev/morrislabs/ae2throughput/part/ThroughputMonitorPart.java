@@ -1,5 +1,8 @@
 package dev.morrislabs.ae2throughput.part;
 
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
+
 import appeng.api.networking.GridFlags;
 import appeng.api.networking.IGridNode;
 import appeng.api.networking.IStackWatcher;
@@ -10,7 +13,11 @@ import appeng.api.networking.ticking.TickingRequest;
 import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartItem;
 import appeng.api.stacks.AEKey;
+import appeng.menu.MenuOpener;
+import appeng.menu.locator.MenuLocators;
 import appeng.parts.AEBasePart;
+
+import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 
 /**
  * Cable-face part that tracks every item flowing through the attached AE2 network
@@ -57,8 +64,17 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
     @Override
     public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
         tracker.pushSample();
-        // Phase 4: broadcast tracker.getAverages() to open menus here.
         return TickRateModulation.SAME;
+    }
+
+    // --- Interaction ---
+
+    @Override
+    public boolean onUseWithoutItem(Player player, Vec3 pos) {
+        if (!player.getCommandSenderWorld().isClientSide()) {
+            MenuOpener.open(ThroughputMonitorMenu.TYPE, player, MenuLocators.forPart(this));
+        }
+        return true;
     }
 
     // --- Geometry ---
