@@ -1,7 +1,11 @@
 # Status
 
 **Active plan:** plan-ae2-throughput-monitor.md
-**Current phase:** Phase 2 (not started)
-**Done:** Phase 1 -- Gradle scaffold, part item, creative tab, initial commit `d39acf3`, tag `v26.1.2-1.0.0`, pushed to `morris-labs/ae2-system-throughput-monitor`.
-**Next:** Phase 2 -- wire `IStorageWatcherNode` with `setWatchAll(true)` into `ThroughputMonitorPart`, add per-call produce/consume accumulation.
-**Blockers:** None. Java is not available in this container; you must run `./gradlew compileJava` locally to verify the build before moving to Phase 2.
+**Current phase:** Phase 1 (complete -- pending local build verification)
+**Done:** Rewound to MC 1.21.1 / NeoForge 21.1.247 / Java 21. Fixed all 26.x API
+references (Identifier → ResourceLocation, displayItems lambda). Committed and pushed.
+**Next:** Confirm `./gradlew compileJava` succeeds locally (especially the AE2 version),
+then Phase 2 -- wire IStorageWatcherNode.
+**Blockers:** AE2 version `19.1.9-beta` is a best estimate -- verify the correct
+1.21.1 NeoForge artifact at https://modmaven.dev/ before building. Also confirm that
+`net.neoforged.moddev` plugin `1.0.21` resolves correctly for NeoForge 21.1.247.

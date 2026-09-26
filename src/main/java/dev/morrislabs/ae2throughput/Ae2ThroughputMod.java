@@ -3,7 +3,7 @@ package dev.morrislabs.ae2throughput;
 import dev.morrislabs.ae2throughput.registry.ModCreativeTabs;
 import dev.morrislabs.ae2throughput.registry.ModParts;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 
@@ -16,7 +16,7 @@ public final class Ae2ThroughputMod {
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
     }
 
-    public static Identifier makeId(String path) {
-        return Identifier.fromNamespaceAndPath(MOD_ID, path);
+    public static ResourceLocation makeId(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
     }
 }

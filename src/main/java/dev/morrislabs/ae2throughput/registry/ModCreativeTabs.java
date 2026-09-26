@@ -17,6 +17,8 @@ public class ModCreativeTabs {
                     CreativeModeTab.builder()
                             .title(Component.translatable("itemGroup." + Ae2ThroughputMod.MOD_ID))
                             .icon(() -> ModParts.THROUGHPUT_MONITOR.get().getDefaultInstance())
-                            .displayItems(ModParts.PARTS.getEntries())
+                            .displayItems((params, output) ->
+                                    ModParts.PARTS.getEntries()
+                                            .forEach(entry -> output.accept(entry.get())))
                             .build());
 }
