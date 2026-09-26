@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "ae2:calculation_processor"
+    },
+    "F": {
+      "item": "ae2:fluix_crystal"
+    }
+  },
+  "pattern": [
+    " C ",
+    "CFC",
+    " C "
+  ],
+  "result": {
+    "count": 1,
+    "id": "ae2throughputmonitor:throughput_monitor"
+  }
+}

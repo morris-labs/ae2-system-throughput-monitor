@@ -10,4 +10,4 @@ run/
 *.ipr
 *.iws
 logs/
-src/generated/resources/
+src/generated/resources/.cache/

@@ -1,6 +1,7 @@
 package dev.morrislabs.ae2throughput;
 
 import dev.morrislabs.ae2throughput.config.ThroughputConfig;
+import dev.morrislabs.ae2throughput.datagen.DataGenerators;
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 import dev.morrislabs.ae2throughput.network.ModNetwork;
 import dev.morrislabs.ae2throughput.registry.ModCreativeTabs;
@@ -24,6 +25,7 @@ public final class Ae2ThroughputMod {
         ModParts.PARTS.register(modEventBus);
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         modEventBus.addListener(ModNetwork::register);
+        modEventBus.addListener(DataGenerators::gather);
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(ClientEventHandlers::registerScreens);
         }
