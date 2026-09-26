@@ -53,6 +53,10 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
                 .addService(IStorageWatcherNode.class, new IStorageWatcherNode() {
                     @Override
                     public void updateWatcher(IStackWatcher newWatcher) {
+                        // Clear stale baseline before AE2 replays the full network state.
+                        // Without this, the diff against old lastSeen values would produce
+                        // spurious spikes when the network reconnects after a split or reload.
+                        tracker.resetBaseline();
                         newWatcher.setWatchAll(true);
                     }
 
@@ -75,7 +79,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
     public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
         tickCounter += ticksSinceLastCall;
         if (tickCounter >= samplePeriodTicks) {
-            tickCounter = 0;
+            tickCounter -= samplePeriodTicks;
             tracker.pushSample();
         }
         return TickRateModulation.SAME;
@@ -109,7 +113,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
 
     @Override
     public boolean onUseWithoutItem(Player player, Vec3 pos) {
-        if (!player.getCommandSenderWorld().isClientSide()) {
+        if (!player.level().isClientSide()) {
             MenuOpener.open(ThroughputMonitorMenu.TYPE, player, MenuLocators.forPart(this));
         }
         return true;

@@ -39,9 +39,13 @@ public record ThroughputUpdatePayload(
             var key = AEKey.readKey(buf);
             long produced = buf.readVarLong();
             long consumed = buf.readVarLong();
-            entries.add(new Entry(key, produced, consumed));
+            // key is null when the serialized key type is no longer registered (e.g. after a mod
+            // update). Skip the entry rather than storing a null that causes an NPE in the renderer.
+            if (key != null) {
+                entries.add(new Entry(key, produced, consumed));
+            }
         }
-        int timescaleOrd = buf.readByte();
+        int timescaleOrd = buf.readUnsignedByte();
         int windowSize = buf.readVarInt();
         int period = buf.readVarInt();
         return new ThroughputUpdatePayload(List.copyOf(entries), timescaleOrd, windowSize, period);

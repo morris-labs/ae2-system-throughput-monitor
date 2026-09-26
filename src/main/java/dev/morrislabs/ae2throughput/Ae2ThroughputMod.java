@@ -29,10 +29,7 @@ public final class Ae2ThroughputMod {
         if (FMLEnvironment.dist == Dist.CLIENT) {
             modEventBus.addListener(ClientEventHandlers::registerScreens);
         }
-        // Load ThroughputMonitorMenu now so its TYPE static field is queued in
-        // AE2's InitMenuTypes before RegisterEvent fires for the MENU registry.
-        @SuppressWarnings("unused")
-        var ignored = ThroughputMonitorMenu.TYPE;
+        ThroughputMonitorMenu.ensureRegistered();
     }
 
     public static ResourceLocation makeId(String path) {

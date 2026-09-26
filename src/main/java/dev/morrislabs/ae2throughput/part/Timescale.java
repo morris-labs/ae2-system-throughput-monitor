@@ -14,13 +14,13 @@ public enum Timescale {
         this.suffix = suffix;
     }
 
+    private static final Timescale[] VALUES = values();
+
     public Timescale next() {
-        Timescale[] v = values();
-        return v[(ordinal() + 1) % v.length];
+        return VALUES[(ordinal() + 1) % VALUES.length];
     }
 
     public static Timescale fromOrdinal(int ord) {
-        Timescale[] v = values();
-        return v[Math.max(0, Math.min(ord, v.length - 1))];
+        return VALUES[Math.max(0, Math.min(ord, VALUES.length - 1))];
     }
 }

@@ -29,6 +29,8 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
     private static final String ACTION_ADJUST_WINDOW   = "adjust_window";
 
     private final ThroughputMonitorPart part;
+    /** Becomes {@code true} whenever a player action changes a setting; triggers immediate resend. */
+    private boolean settingsDirty = true;
 
     public ThroughputMonitorMenu(int containerId, Inventory playerInventory, ThroughputMonitorPart part) {
         super(TYPE, containerId, playerInventory, part);
@@ -43,16 +45,19 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
 
     private void doCycleTimescale() {
         part.cycleTimescale();
+        settingsDirty = true;
         saveChanges();
     }
 
     private void doAdjustPeriod(Integer delta) {
         part.setSamplePeriodTicks(part.getSamplePeriodTicks() + delta);
+        settingsDirty = true;
         saveChanges();
     }
 
     private void doAdjustWindow(Integer delta) {
         part.getTracker().setWindowSize(part.getTracker().getWindowSize() + delta);
+        settingsDirty = true;
         saveChanges();
     }
 
@@ -87,24 +92,39 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
     @Override
     public void broadcastChanges() {
         if (isServerSide() && getPlayer() instanceof ServerPlayer serverPlayer) {
-            var averages = part.getTracker().getAverages();
-            int periodTicks = part.getSamplePeriodTicks();
-            float toPerSecond = 20.0f / periodTicks;
+            var tracker = part.getTracker();
+            boolean trackerChanged = tracker.isDirtyAndClear();
+            if (trackerChanged || settingsDirty) {
+                settingsDirty = false;
+                int periodTicks = part.getSamplePeriodTicks();
+                float toPerSecond = 20.0f / periodTicks;
+                var averages = tracker.getAverages();
 
-            var entries = new ArrayList<ThroughputUpdatePayload.Entry>(averages.size());
-            for (var e : averages.entrySet()) {
-                long produced = Math.round(e.getValue().produced() * toPerSecond);
-                long consumed = Math.round(e.getValue().consumed() * toPerSecond);
-                entries.add(new ThroughputUpdatePayload.Entry(e.getKey(), produced, consumed));
+                var entries = new ArrayList<ThroughputUpdatePayload.Entry>(averages.size());
+                for (var e : averages.entrySet()) {
+                    long produced = Math.round(e.getValue().produced() * toPerSecond);
+                    long consumed = Math.round(e.getValue().consumed() * toPerSecond);
+                    entries.add(new ThroughputUpdatePayload.Entry(e.getKey(), produced, consumed));
+                }
+
+                PacketDistributor.sendToPlayer(serverPlayer, new ThroughputUpdatePayload(
+                        entries,
+                        part.getTimescale().ordinal(),
+                        tracker.getWindowSize(),
+                        periodTicks));
             }
-
-            PacketDistributor.sendToPlayer(serverPlayer, new ThroughputUpdatePayload(
-                    entries,
-                    part.getTimescale().ordinal(),
-                    part.getTracker().getWindowSize(),
-                    periodTicks));
         }
         super.broadcastChanges();
+    }
+
+    /**
+     * Ensures this class is loaded and {@link #TYPE} is queued with AE2's menu registry.
+     * Call this during mod initialization before AE2's {@code InitMenuTypes} fires.
+     */
+    public static void ensureRegistered() {
+        // Referencing TYPE here is intentional: it forces the static initializer which calls
+        // MenuTypeBuilder.build(), queuing the type registration with AE2.
+        var ignored = TYPE;
     }
 
     // --- Helpers ---

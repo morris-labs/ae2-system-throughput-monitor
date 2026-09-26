@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import appeng.api.stacks.AEKey;
 
@@ -20,6 +21,9 @@ import appeng.api.stacks.AEKey;
 public class FlowTracker {
 
     private int windowSize;
+
+    /** Set to {@code true} after each {@link #pushSample} call; cleared by {@link #isDirtyAndClear}. */
+    private boolean dirty = true;
 
     /** Last amount observed for each key. Keys absent here are first-time observations. */
     private final Map<AEKey, Long> lastSeen = new HashMap<>();
@@ -75,6 +79,7 @@ public class FlowTracker {
         }
 
         pending.clear();
+        dirty = true;
 
         // Prune keys whose window has gone entirely to zero (flow stopped long enough ago).
         pruneZeroWindows();
@@ -127,9 +132,10 @@ public class FlowTracker {
 
     /** Keys that either have pending data this period or already have a window (tracking ongoing). */
     private Iterable<AEKey> allTrackedKeys() {
-        if (windows.isEmpty()) return pending.keySet();
-        if (pending.isEmpty()) return windows.keySet();
-
+        // Defensive copies prevent ConcurrentModificationException if pushSample() modifies
+        // the maps while iterating (for example, computeIfAbsent adding a new window entry).
+        if (windows.isEmpty()) return Set.copyOf(pending.keySet());
+        if (pending.isEmpty()) return Set.copyOf(windows.keySet());
         var all = new java.util.HashSet<AEKey>(windows.keySet());
         all.addAll(pending.keySet());
         return all;
@@ -140,11 +146,33 @@ public class FlowTracker {
     }
 
     /**
+     * Returns {@code true} if {@link #pushSample} has run since the last call, then resets the flag.
+     * Use this to skip network packets when the tracker data has not changed.
+     */
+    public boolean isDirtyAndClear() {
+        boolean was = dirty;
+        dirty = false;
+        return was;
+    }
+
+    /**
+     * Clears the per-key baseline so the next {@link #onStackChange} callbacks after a grid
+     * reconnect are treated as first observations rather than spurious spikes.
+     * Leaves existing window data intact.
+     */
+    public void resetBaseline() {
+        lastSeen.clear();
+        pending.clear();
+    }
+
+    /**
      * Changes the window size. Clears all existing window data because the buffer
      * dimensions change.
      */
-    public void setWindowSize(int windowSize) {
-        this.windowSize = Math.max(1, windowSize);
+    public void setWindowSize(int newSize) {
+        // Max bound matches ThroughputMonitorPart.MAX_WINDOW; clamped here to prevent a
+        // malicious or overflowed client value from causing an OOM on window allocation.
+        this.windowSize = Math.max(1, Math.min(60, newSize));
         windows.clear();
         heads.clear();
     }

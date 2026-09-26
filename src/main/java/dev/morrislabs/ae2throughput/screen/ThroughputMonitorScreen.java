@@ -2,7 +2,6 @@ package dev.morrislabs.ae2throughput.screen;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -52,6 +51,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     private int windowSize     = 10;
     private int samplePeriodTicks = 20;
     private List<ThroughputUpdatePayload.Entry> rawEntries = List.of();
+    private List<ThroughputUpdatePayload.Entry> filteredCache = List.of();
 
     // Settings bar buttons (created in init)
     private Button btnTimescale;
@@ -109,6 +109,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     private void setFilter(Filter f) {
         filter = f;
         scrollOffset = 0;
+        rebuildFilteredCache();
     }
 
     @Override
@@ -141,7 +142,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     }
 
     private void renderRows(GuiGraphics gg, int mouseX, int mouseY) {
-        List<ThroughputUpdatePayload.Entry> visible = filteredEntries();
+        List<ThroughputUpdatePayload.Entry> visible = filteredCache;
         int total = visible.size();
         int maxScroll = Math.max(0, total - VISIBLE_ROWS);
         scrollOffset = Math.min(scrollOffset, maxScroll);
@@ -195,7 +196,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     }
 
     private void renderScrollbar(GuiGraphics gg) {
-        List<ThroughputUpdatePayload.Entry> visible = filteredEntries();
+        List<ThroughputUpdatePayload.Entry> visible = filteredCache;
         int total = visible.size();
         if (total <= VISIBLE_ROWS) return;
 
@@ -215,10 +216,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         int sy = topPos + SETTINGS_Y;
         int lx = leftPos;
 
-        // Update timescale button label to reflect current state from server
-        if (btnTimescale != null) {
-            btnTimescale.setMessage(Component.literal(timescale.suffix));
-        }
+        btnTimescale.setMessage(Component.literal(timescale.suffix));
 
         // "Win:" label + current value
         gg.drawString(font, "Win:", lx + 36, sy + 3, COLOR_DIM, false);
@@ -237,7 +235,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
-        int maxScroll = Math.max(0, filteredEntries().size() - VISIBLE_ROWS);
+        int maxScroll = Math.max(0, filteredCache.size() - VISIBLE_ROWS);
         scrollOffset = (int) Math.max(0, Math.min(maxScroll, scrollOffset - Math.signum(scrollY)));
         return true;
     }
@@ -255,14 +253,15 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         this.timescale = Timescale.fromOrdinal(payload.timescaleOrdinal());
         this.windowSize = payload.windowSize();
         this.samplePeriodTicks = payload.samplePeriodTicks();
-        int maxScroll = Math.max(0, filteredEntries().size() - VISIBLE_ROWS);
+        rebuildFilteredCache();
+        int maxScroll = Math.max(0, filteredCache.size() - VISIBLE_ROWS);
         scrollOffset = Math.min(scrollOffset, maxScroll);
     }
 
     // --- Helpers ---
 
-    private List<ThroughputUpdatePayload.Entry> filteredEntries() {
-        return rawEntries.stream()
+    private void rebuildFilteredCache() {
+        filteredCache = rawEntries.stream()
                 .filter(e -> switch (filter) {
                     case ALL -> true;
                     case PRODUCING -> e.produced() > 0;
@@ -271,7 +270,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 .sorted(Comparator.comparingLong(
                         (ThroughputUpdatePayload.Entry e) -> e.produced() + e.consumed())
                         .reversed())
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private static String formatRate(long rate) {
