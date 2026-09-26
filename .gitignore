@@ -1,0 +1,13 @@
+*.env
+.env
+ref/
+.gradle/
+build/
+out/
+run/
+.idea/
+*.iml
+*.ipr
+*.iws
+logs/
+src/generated/resources/
