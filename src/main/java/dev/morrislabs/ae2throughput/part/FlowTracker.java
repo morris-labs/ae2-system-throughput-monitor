@@ -107,9 +107,10 @@ public class FlowTracker {
     }
 
     /**
-     * Returns the rolling average for every key that has non-zero flow.
-     * The value is in items-per-sample-period -- multiply by {@code (20 / periodTicks)}
-     * to convert to items-per-second.
+     * Returns raw window totals for every key that has non-zero flow.
+     * Each value is the sum over all samples in the window. Callers divide by
+     * {@link #getWindowSize()} and by {@code samplePeriodTicks / 20} to get items per second.
+     * Returning totals rather than averages preserves the fractional part for display.
      */
     public Map<AEKey, FlowSample> getAverages() {
         Map<AEKey, FlowSample> result = new HashMap<>();
@@ -121,10 +122,8 @@ public class FlowTracker {
                 totalProduced += sample[0];
                 totalConsumed += sample[1];
             }
-            long avgProduced = totalProduced / windowSize;
-            long avgConsumed = totalConsumed / windowSize;
-            if (avgProduced > 0 || avgConsumed > 0) {
-                result.put(entry.getKey(), new FlowSample(avgProduced, avgConsumed));
+            if (totalProduced > 0 || totalConsumed > 0) {
+                result.put(entry.getKey(), new FlowSample(totalProduced, totalConsumed));
             }
         }
         return result;

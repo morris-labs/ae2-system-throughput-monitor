@@ -97,20 +97,24 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
             if (trackerChanged || settingsDirty) {
                 settingsDirty = false;
                 int periodTicks = part.getSamplePeriodTicks();
-                float toPerSecond = 20.0f / periodTicks;
+                int windowSize  = tracker.getWindowSize();
+                // Scale factor: tenths-of-items per second, preserving fractional flow.
+                // totalProduced is the raw window sum; divide by windowSize*periodTicks/20
+                // to get items/sec, then multiply by 10 for tenths precision.
+                double toTenthsPerSec = 200.0 / ((double) windowSize * periodTicks);
                 var averages = tracker.getAverages();
 
                 var entries = new ArrayList<ThroughputUpdatePayload.Entry>(averages.size());
                 for (var e : averages.entrySet()) {
-                    long produced = Math.round(e.getValue().produced() * toPerSecond);
-                    long consumed = Math.round(e.getValue().consumed() * toPerSecond);
+                    long produced = Math.round(e.getValue().totalProduced() * toTenthsPerSec);
+                    long consumed = Math.round(e.getValue().totalConsumed() * toTenthsPerSec);
                     entries.add(new ThroughputUpdatePayload.Entry(e.getKey(), produced, consumed));
                 }
 
                 PacketDistributor.sendToPlayer(serverPlayer, new ThroughputUpdatePayload(
                         entries,
                         part.getTimescale().ordinal(),
-                        tracker.getWindowSize(),
+                        windowSize,
                         periodTicks));
             }
         }

@@ -13,8 +13,8 @@ import dev.morrislabs.ae2throughput.Ae2ThroughputMod;
 
 /**
  * Server-to-client snapshot of per-key flow rates and current part settings.
- * Rates in the entries are in items per second; the client multiplies by the
- * timescale's multiplier for display.
+ * Rates in entries are in tenths of an item per second (for example, 15 = 1.5/s).
+ * The client multiplies by the timescale's multiplier before display.
  */
 public record ThroughputUpdatePayload(
         List<Entry> entries,
@@ -23,7 +23,7 @@ public record ThroughputUpdatePayload(
         int samplePeriodTicks
 ) implements CustomPacketPayload {
 
-    /** One key's produce/consume rates in items per second. */
+    /** One key's produce/consume rates in tenths of an item per second. */
     public record Entry(AEKey key, long produced, long consumed) {}
 
     public static final Type<ThroughputUpdatePayload> TYPE =

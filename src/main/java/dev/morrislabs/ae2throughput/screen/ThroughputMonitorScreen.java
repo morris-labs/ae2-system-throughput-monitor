@@ -273,10 +273,14 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 .toList();
     }
 
-    private static String formatRate(long rate) {
-        if (rate >= 1_000_000_000L) return (rate / 1_000_000_000L) + "G";
-        if (rate >= 1_000_000L)     return (rate / 1_000_000L) + "M";
-        if (rate >= 1_000L)         return (rate / 1_000L) + "k";
-        return Long.toString(rate);
+    /**
+     * Formats a rate expressed in tenths of an item (for example, 15 = 1.5 items).
+     * Displays one decimal place below 1,000; uses k/M/G suffixes above that.
+     */
+    private static String formatRate(long tenths) {
+        if (tenths >= 10_000_000_000L) return (tenths / 10_000_000_000L) + "G";
+        if (tenths >= 10_000_000L)     return (tenths / 10_000_000L) + "M";
+        if (tenths >= 10_000L)         return (tenths / 10_000L) + "k";
+        return (tenths / 10) + "." + (tenths % 10);
     }
 }

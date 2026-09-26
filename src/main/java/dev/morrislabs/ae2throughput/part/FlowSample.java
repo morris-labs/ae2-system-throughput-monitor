@@ -1,15 +1,16 @@
 package dev.morrislabs.ae2throughput.part;
 
 /**
- * One time-slice of flow data for a single item key.
+ * Raw flow totals for a single item key, summed over the entire rolling window.
+ * Divide by {@code windowSize} and by {@code samplePeriodTicks / 20} to get items per second.
  *
- * @param produced items added to the network during this sample period
- * @param consumed items removed from the network during this sample period
+ * @param totalProduced items added to the network across all window samples
+ * @param totalConsumed items removed from the network across all window samples
  */
-public record FlowSample(long produced, long consumed) {
+public record FlowSample(long totalProduced, long totalConsumed) {
     public static final FlowSample EMPTY = new FlowSample(0, 0);
 
     public boolean isZero() {
-        return produced == 0 && consumed == 0;
+        return totalProduced == 0 && totalConsumed == 0;
     }
 }
