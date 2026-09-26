@@ -4,10 +4,13 @@ import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 import dev.morrislabs.ae2throughput.network.ModNetwork;
 import dev.morrislabs.ae2throughput.registry.ModCreativeTabs;
 import dev.morrislabs.ae2throughput.registry.ModParts;
+import dev.morrislabs.ae2throughput.screen.ClientEventHandlers;
 
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
 
 @Mod(Ae2ThroughputMod.MOD_ID)
 public final class Ae2ThroughputMod {
@@ -17,6 +20,9 @@ public final class Ae2ThroughputMod {
         ModParts.PARTS.register(modEventBus);
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         modEventBus.addListener(ModNetwork::register);
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            modEventBus.addListener(ClientEventHandlers::registerScreens);
+        }
         // Load ThroughputMonitorMenu now so its TYPE static field is queued in
         // AE2's InitMenuTypes before RegisterEvent fires for the MENU registry.
         @SuppressWarnings("unused")
