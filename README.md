@@ -67,7 +67,7 @@ block entity NBT and persist across restarts.
 
 ## License
 
-MIT. See `LICENSE` for details (not yet present -- to be added).
+MIT. See the `LICENSE` file for details.
 
 ## Building from source
 
