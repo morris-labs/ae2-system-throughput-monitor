@@ -1,5 +1,7 @@
 package dev.morrislabs.ae2throughput.part;
 
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
@@ -25,11 +27,17 @@ import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
  */
 public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
 
-    static final int DEFAULT_WINDOW_SIZE = 10;
-    static final int DEFAULT_SAMPLE_PERIOD_TICKS = 20;
+    public static final int DEFAULT_WINDOW_SIZE = 10;
+    public static final int DEFAULT_SAMPLE_PERIOD_TICKS = 20;
+    public static final int MIN_PERIOD = 1;
+    public static final int MAX_PERIOD = 100;
+    public static final int MIN_WINDOW = 1;
+    public static final int MAX_WINDOW = 60;
 
     private final FlowTracker tracker;
     private int samplePeriodTicks;
+    private Timescale timescale = Timescale.PER_SECOND;
+    private int tickCounter = 0;
 
     public ThroughputMonitorPart(IPartItem<?> partItem) {
         super(partItem);
@@ -58,13 +66,42 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
 
     @Override
     public TickingRequest getTickingRequest(IGridNode node) {
-        return new TickingRequest(samplePeriodTicks, samplePeriodTicks, false);
+        // Tick every game tick so samplePeriodTicks can be changed at runtime.
+        return new TickingRequest(1, 1, false);
     }
 
     @Override
     public TickRateModulation tickingRequest(IGridNode node, int ticksSinceLastCall) {
-        tracker.pushSample();
+        tickCounter += ticksSinceLastCall;
+        if (tickCounter >= samplePeriodTicks) {
+            tickCounter = 0;
+            tracker.pushSample();
+        }
         return TickRateModulation.SAME;
+    }
+
+    // --- NBT ---
+
+    @Override
+    public void writeToNBT(CompoundTag data, HolderLookup.Provider registries) {
+        super.writeToNBT(data, registries);
+        data.putInt("samplePeriodTicks", samplePeriodTicks);
+        data.putInt("windowSize", tracker.getWindowSize());
+        data.putInt("timescale", timescale.ordinal());
+    }
+
+    @Override
+    public void readFromNBT(CompoundTag data, HolderLookup.Provider registries) {
+        super.readFromNBT(data, registries);
+        if (data.contains("samplePeriodTicks")) {
+            setSamplePeriodTicks(data.getInt("samplePeriodTicks"));
+        }
+        if (data.contains("windowSize")) {
+            tracker.setWindowSize(data.getInt("windowSize"));
+        }
+        if (data.contains("timescale")) {
+            timescale = Timescale.fromOrdinal(data.getInt("timescale"));
+        }
     }
 
     // --- Interaction ---
@@ -85,7 +122,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
         bch.addBox(4, 4, 13, 12, 12, 14);
     }
 
-    // --- Accessors for Phase 4+ ---
+    // --- Accessors ---
 
     public FlowTracker getTracker() {
         return tracker;
@@ -96,6 +133,14 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
     }
 
     public void setSamplePeriodTicks(int ticks) {
-        this.samplePeriodTicks = Math.max(1, Math.min(100, ticks));
+        this.samplePeriodTicks = Math.max(MIN_PERIOD, Math.min(MAX_PERIOD, ticks));
+    }
+
+    public Timescale getTimescale() {
+        return timescale;
+    }
+
+    public void cycleTimescale() {
+        this.timescale = timescale.next();
     }
 }

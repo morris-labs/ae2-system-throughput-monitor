@@ -15,22 +15,24 @@ import appeng.api.client.AEKeyRendering;
 
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 import dev.morrislabs.ae2throughput.network.ThroughputUpdatePayload;
+import dev.morrislabs.ae2throughput.part.Timescale;
 
 /**
- * Client-side GUI for the throughput monitor part. Displays all item keys with non-zero
- * flow, color-coded green (produced) and red (consumed), sorted by total rate descending.
+ * Client-side GUI for the throughput monitor part. Displays all keys with non-zero flow,
+ * color-coded green (produced) and red (consumed), sorted by total rate descending.
+ * A settings bar at the bottom controls timescale, sample period, and rolling window.
  */
 public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputMonitorMenu> {
 
-    // Layout constants (all in pixels, relative to leftPos/topPos unless noted)
-    private static final int IMAGE_W = 256;
-    private static final int IMAGE_H = 220;
-    private static final int ROW_H = 20;
+    private static final int IMAGE_W     = 256;
+    private static final int IMAGE_H     = 224;
+    private static final int ROW_H       = 20;
     private static final int VISIBLE_ROWS = 8;
-    private static final int LIST_X = 4;       // x offset for rows inside window
-    private static final int LIST_Y = 32;      // y offset for first row
-    private static final int LIST_W = 238;     // width available for rows
-    private static final int SCROLL_W = 10;    // scrollbar track width
+    private static final int LIST_X      = 4;
+    private static final int LIST_Y      = 32;
+    private static final int LIST_W      = 238;
+    private static final int SCROLL_W    = 10;
+    private static final int SETTINGS_Y  = LIST_Y + VISIBLE_ROWS * ROW_H + 3;  // 195
 
     private static final int COLOR_BG       = 0xFF1A1A2E;
     private static final int COLOR_BORDER   = 0xFF4466AA;
@@ -42,22 +44,29 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     private static final int COLOR_DIM      = 0xFF888888;
     private static final int COLOR_SCROLL   = 0xFF556699;
 
-    /** Which flow direction to show. */
     private enum Filter { ALL, PRODUCING, CONSUMING }
 
-    private Filter filter = Filter.ALL;
-    private int scrollOffset = 0;
+    private Filter filter      = Filter.ALL;
+    private int scrollOffset   = 0;
+    private Timescale timescale = Timescale.PER_SECOND;
+    private int windowSize     = 10;
+    private int samplePeriodTicks = 20;
     private List<ThroughputUpdatePayload.Entry> rawEntries = List.of();
+
+    // Settings bar buttons (created in init)
+    private Button btnTimescale;
 
     public ThroughputMonitorScreen(ThroughputMonitorMenu menu, Inventory inv, Component title) {
         super(menu, inv, title);
-        this.imageWidth = IMAGE_W;
+        this.imageWidth  = IMAGE_W;
         this.imageHeight = IMAGE_H;
     }
 
     @Override
     protected void init() {
         super.init();
+
+        // Filter row
         int bx = leftPos + 6;
         int by = topPos + 16;
         addRenderableWidget(Button.builder(
@@ -72,6 +81,29 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 Component.translatable("gui.ae2throughputmonitor.filter.consuming"),
                 b -> setFilter(Filter.CONSUMING))
                 .pos(bx + 122, by).size(68, 12).build());
+
+        // Settings bar
+        int sy = topPos + SETTINGS_Y;
+        btnTimescale = addRenderableWidget(Button.builder(
+                Component.literal(timescale.suffix),
+                b -> menu.cycleTimescale())
+                .pos(leftPos + 4, sy).size(28, 14).build());
+
+        // Window size controls
+        addRenderableWidget(Button.builder(Component.literal("-"),
+                b -> menu.adjustWindow(-1))
+                .pos(leftPos + 88, sy).size(14, 14).build());
+        addRenderableWidget(Button.builder(Component.literal("+"),
+                b -> menu.adjustWindow(+1))
+                .pos(leftPos + 118, sy).size(14, 14).build());
+
+        // Sample period controls
+        addRenderableWidget(Button.builder(Component.literal("-"),
+                b -> menu.adjustPeriod(-1))
+                .pos(leftPos + 178, sy).size(14, 14).build());
+        addRenderableWidget(Button.builder(Component.literal("+"),
+                b -> menu.adjustPeriod(+1))
+                .pos(leftPos + 208, sy).size(14, 14).build());
     }
 
     private void setFilter(Filter f) {
@@ -86,6 +118,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         super.render(gg, mouseX, mouseY, partial);
         renderRows(gg, mouseX, mouseY);
         renderScrollbar(gg);
+        renderSettingsBar(gg);
         renderTooltip(gg, mouseX, mouseY);
     }
 
@@ -96,17 +129,14 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         int h = imageHeight;
 
         gg.fill(x, y, x + w, y + h, COLOR_BG);
-        // Header area
         gg.fill(x, y, x + w, y + LIST_Y - 2, COLOR_HEADER);
-        // Header separator
         gg.fill(x, y + LIST_Y - 2, x + w, y + LIST_Y - 1, COLOR_BORDER);
-        // Outer border
-        gg.fill(x,         y,         x + w, y + 1,     COLOR_BORDER);
-        gg.fill(x,         y + h - 1, x + w, y + h,     COLOR_BORDER);
-        gg.fill(x,         y,         x + 1, y + h,     COLOR_BORDER);
-        gg.fill(x + w - 1, y,         x + w, y + h,     COLOR_BORDER);
+        gg.fill(x, y + SETTINGS_Y - 2, x + w, y + SETTINGS_Y - 1, COLOR_BORDER);
+        gg.fill(x, y,         x + w, y + 1,     COLOR_BORDER);
+        gg.fill(x, y + h - 1, x + w, y + h,     COLOR_BORDER);
+        gg.fill(x, y,         x + 1, y + h,     COLOR_BORDER);
+        gg.fill(x + w - 1, y, x + w, y + h,     COLOR_BORDER);
 
-        // Title
         gg.drawCenteredString(font, title, x + w / 2, y + 4, 0xFFFFFF);
     }
 
@@ -137,27 +167,26 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 gg.fill(rowX, rowY, rowX + LIST_W, rowY + ROW_H, COLOR_ROW_ALT);
             }
 
-            // Item icon (16x16)
             AEKeyRendering.drawInGui(mc, gg, rowX + 2, rowY + 2, entry.key());
 
-            // Item name (truncated)
             String name = font.plainSubstrByWidth(
-                    entry.key().getDisplayName().getString(), 110);
+                    entry.key().getDisplayName().getString(), 100);
             gg.drawString(font, name, rowX + 20, rowY + 6, COLOR_TEXT, false);
 
-            // Rates, right-aligned in two half-height lines
-            if (entry.produced() > 0) {
-                String prod = "+" + formatRate(entry.produced()) + "/s";
+            long produced = entry.produced() * timescale.multiplier;
+            long consumed = entry.consumed() * timescale.multiplier;
+
+            if (produced > 0) {
+                String prod = "+" + formatRate(produced) + timescale.suffix;
                 int tx = rowX + LIST_W - SCROLL_W - 4 - font.width(prod);
                 gg.drawString(font, prod, tx, rowY + 3, COLOR_PRODUCED, false);
             }
-            if (entry.consumed() > 0) {
-                String cons = "-" + formatRate(entry.consumed()) + "/s";
+            if (consumed > 0) {
+                String cons = "-" + formatRate(consumed) + timescale.suffix;
                 int tx = rowX + LIST_W - SCROLL_W - 4 - font.width(cons);
                 gg.drawString(font, cons, tx, rowY + 12, COLOR_CONSUMED, false);
             }
 
-            // Hover tooltip with full name
             if (mouseX >= rowX + 2 && mouseX < rowX + 18
                     && mouseY >= rowY + 2 && mouseY < rowY + 18) {
                 setTooltipForNextRenderPass(entry.key().getDisplayName());
@@ -182,15 +211,29 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         gg.fill(trackX + 1, thumbY, trackX + SCROLL_W - 3, thumbY + thumbH, COLOR_SCROLL);
     }
 
-    @Override
-    protected void renderBg(GuiGraphics gg, float partial, int mouseX, int mouseY) {
-        // Background drawn in renderWindow(); nothing additional needed here.
+    private void renderSettingsBar(GuiGraphics gg) {
+        int sy = topPos + SETTINGS_Y;
+        int lx = leftPos;
+
+        // Update timescale button label to reflect current state from server
+        if (btnTimescale != null) {
+            btnTimescale.setMessage(Component.literal(timescale.suffix));
+        }
+
+        // "Win:" label + current value
+        gg.drawString(font, "Win:", lx + 36, sy + 3, COLOR_DIM, false);
+        gg.drawString(font, String.valueOf(windowSize), lx + 104, sy + 3, COLOR_TEXT, false);
+
+        // "Tick:" label + current value
+        gg.drawString(font, "Tick:", lx + 136, sy + 3, COLOR_DIM, false);
+        gg.drawString(font, samplePeriodTicks + "t", lx + 194, sy + 3, COLOR_TEXT, false);
     }
 
     @Override
-    protected void renderLabels(GuiGraphics gg, int mouseX, int mouseY) {
-        // Labels rendered in renderRows() with absolute coordinates; suppress defaults.
-    }
+    protected void renderBg(GuiGraphics gg, float partial, int mouseX, int mouseY) {}
+
+    @Override
+    protected void renderLabels(GuiGraphics gg, int mouseX, int mouseY) {}
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
@@ -199,20 +242,19 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
         return true;
     }
 
-    // --- Data feed from network ---
+    // --- Data feed ---
 
-    /**
-     * Called by the payload handler when the server sends a throughput snapshot.
-     * Checks whether the current screen is a ThroughputMonitorScreen.
-     */
     public static void handlePayload(ThroughputUpdatePayload payload) {
         if (Minecraft.getInstance().screen instanceof ThroughputMonitorScreen s) {
-            s.receiveEntries(payload.entries());
+            s.receivePayload(payload);
         }
     }
 
-    private void receiveEntries(List<ThroughputUpdatePayload.Entry> entries) {
-        this.rawEntries = entries;
+    private void receivePayload(ThroughputUpdatePayload payload) {
+        this.rawEntries = payload.entries();
+        this.timescale = Timescale.fromOrdinal(payload.timescaleOrdinal());
+        this.windowSize = payload.windowSize();
+        this.samplePeriodTicks = payload.samplePeriodTicks();
         int maxScroll = Math.max(0, filteredEntries().size() - VISIBLE_ROWS);
         scrollOffset = Math.min(scrollOffset, maxScroll);
     }

@@ -12,12 +12,18 @@ import appeng.api.stacks.AEKey;
 import dev.morrislabs.ae2throughput.Ae2ThroughputMod;
 
 /**
- * Server-to-client snapshot of per-key flow rates for all keys with non-zero throughput.
- * Rates are in items per second.
+ * Server-to-client snapshot of per-key flow rates and current part settings.
+ * Rates in the entries are in items per second; the client multiplies by the
+ * timescale's multiplier for display.
  */
-public record ThroughputUpdatePayload(List<Entry> entries) implements CustomPacketPayload {
+public record ThroughputUpdatePayload(
+        List<Entry> entries,
+        int timescaleOrdinal,
+        int windowSize,
+        int samplePeriodTicks
+) implements CustomPacketPayload {
 
-    /** One key's current produce/consume rates, in items per second. */
+    /** One key's produce/consume rates in items per second. */
     public record Entry(AEKey key, long produced, long consumed) {}
 
     public static final Type<ThroughputUpdatePayload> TYPE =
@@ -35,7 +41,10 @@ public record ThroughputUpdatePayload(List<Entry> entries) implements CustomPack
             long consumed = buf.readVarLong();
             entries.add(new Entry(key, produced, consumed));
         }
-        return new ThroughputUpdatePayload(List.copyOf(entries));
+        int timescaleOrd = buf.readByte();
+        int windowSize = buf.readVarInt();
+        int period = buf.readVarInt();
+        return new ThroughputUpdatePayload(List.copyOf(entries), timescaleOrd, windowSize, period);
     }
 
     public void write(RegistryFriendlyByteBuf buf) {
@@ -45,6 +54,9 @@ public record ThroughputUpdatePayload(List<Entry> entries) implements CustomPack
             buf.writeVarLong(e.produced());
             buf.writeVarLong(e.consumed());
         }
+        buf.writeByte(timescaleOrdinal);
+        buf.writeVarInt(windowSize);
+        buf.writeVarInt(samplePeriodTicks);
     }
 
     @Override
