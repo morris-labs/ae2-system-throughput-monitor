@@ -19,6 +19,7 @@ import appeng.menu.MenuOpener;
 import appeng.menu.locator.MenuLocators;
 import appeng.parts.AEBasePart;
 
+import dev.morrislabs.ae2throughput.config.ThroughputConfig;
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 
 /**
@@ -42,8 +43,8 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
     public ThroughputMonitorPart(IPartItem<?> partItem) {
         super(partItem);
 
-        this.samplePeriodTicks = DEFAULT_SAMPLE_PERIOD_TICKS;
-        this.tracker = new FlowTracker(DEFAULT_WINDOW_SIZE);
+        this.samplePeriodTicks = ThroughputConfig.DEFAULT_SAMPLE_PERIOD_TICKS.get();
+        this.tracker = new FlowTracker(ThroughputConfig.DEFAULT_WINDOW_SIZE.get());
 
         getMainNode()
                 .setIdlePowerUsage(1.0 / 2.0)
