@@ -171,7 +171,7 @@ public class FlowTracker {
     public void setWindowSize(int newSize) {
         // Max bound matches ThroughputMonitorPart.MAX_WINDOW; clamped here to prevent a
         // malicious or overflowed client value from causing an OOM on window allocation.
-        this.windowSize = Math.max(1, Math.min(60, newSize));
+        this.windowSize = Math.max(1, Math.min(300, newSize));
         windows.clear();
         heads.clear();
     }

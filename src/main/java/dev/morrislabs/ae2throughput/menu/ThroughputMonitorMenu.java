@@ -131,6 +131,10 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
         var ignored = TYPE;
     }
 
+    public ThroughputMonitorPart getPart() {
+        return part;
+    }
+
     // --- Helpers ---
 
     private void saveChanges() {

@@ -21,5 +21,7 @@ public class ModLanguageProvider extends LanguageProvider {
         add("gui.ae2throughputmonitor.filter.producing",   "Producing");
         add("gui.ae2throughputmonitor.filter.consuming",   "Consuming");
         add("gui.ae2throughputmonitor.no_flow",            "No items flowing");
+        add("gui.ae2throughputmonitor.search",             "Search");
+        add("gui.ae2throughputmonitor.search_hint",        "Search items...");
     }
 }

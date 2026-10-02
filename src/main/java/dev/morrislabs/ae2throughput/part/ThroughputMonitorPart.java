@@ -14,11 +14,14 @@ import appeng.api.networking.ticking.TickRateModulation;
 import appeng.api.networking.ticking.TickingRequest;
 import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartItem;
+import appeng.api.parts.IPartModel;
 import appeng.api.stacks.AEKey;
 import appeng.menu.MenuOpener;
 import appeng.menu.locator.MenuLocators;
 import appeng.parts.AEBasePart;
+import appeng.parts.PartModel;
 
+import dev.morrislabs.ae2throughput.Ae2ThroughputMod;
 import dev.morrislabs.ae2throughput.config.ThroughputConfig;
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 
@@ -28,12 +31,15 @@ import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
  */
 public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
 
-    public static final int DEFAULT_WINDOW_SIZE = 10;
+    public static final IPartModel MODEL = new PartModel(
+            Ae2ThroughputMod.makeId("part/throughput_monitor"));
+
+    public static final int DEFAULT_WINDOW_SIZE = 300;
     public static final int DEFAULT_SAMPLE_PERIOD_TICKS = 20;
     public static final int MIN_PERIOD = 1;
-    public static final int MAX_PERIOD = 100;
+    public static final int MAX_PERIOD = 200;
     public static final int MIN_WINDOW = 1;
-    public static final int MAX_WINDOW = 60;
+    public static final int MAX_WINDOW = 300;
 
     private final FlowTracker tracker;
     private int samplePeriodTicks;
@@ -119,6 +125,13 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
         return true;
     }
 
+    // --- Model ---
+
+    @Override
+    public IPartModel getStaticModels() {
+        return MODEL;
+    }
+
     // --- Geometry ---
 
     @Override
@@ -147,5 +160,19 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
 
     public void cycleTimescale() {
         this.timescale = timescale.next();
+    }
+
+    /**
+     * Sets window size and sample period to cover approximately {@code totalSeconds}
+     * of observation time. Uses as many samples as MAX_WINDOW allows given the period.
+     */
+    public void applyWindowSeconds(int totalSeconds) {
+        int totalTicks = totalSeconds * 20;
+        int period = Math.max(MIN_PERIOD,
+                Math.min(MAX_PERIOD, (totalTicks + MAX_WINDOW - 1) / MAX_WINDOW));
+        int window = Math.max(MIN_WINDOW,
+                Math.min(MAX_WINDOW, totalTicks / period));
+        tracker.setWindowSize(window);
+        setSamplePeriodTicks(period);
     }
 }

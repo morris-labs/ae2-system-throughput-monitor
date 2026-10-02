@@ -3,6 +3,8 @@
   "gui.ae2throughputmonitor.filter.consuming": "Consuming",
   "gui.ae2throughputmonitor.filter.producing": "Producing",
   "gui.ae2throughputmonitor.no_flow": "No items flowing",
+  "gui.ae2throughputmonitor.search": "Search",
+  "gui.ae2throughputmonitor.search_hint": "Search items...",
   "item.ae2throughputmonitor.throughput_monitor": "ME System Throughput Monitor",
   "itemGroup.ae2throughputmonitor": "AE2 System Throughput Monitor"
 }

@@ -11,3 +11,4 @@ run/
 *.iws
 logs/
 src/generated/resources/.cache/
+appeng/

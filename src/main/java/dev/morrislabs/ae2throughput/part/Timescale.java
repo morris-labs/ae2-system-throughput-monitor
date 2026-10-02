@@ -1,16 +1,13 @@
 package dev.morrislabs.ae2throughput.part;
 
-/** Display timescale for throughput rates. Applies a multiplier to per-second values. */
+/** Display timescale for throughput rates. */
 public enum Timescale {
-    PER_SECOND(1L, "/s"),
-    PER_MINUTE(60L, "/m"),
-    PER_HOUR(3600L, "/h");
+    PER_SECOND("/s"),
+    PER_TICK("/t");
 
-    public final long multiplier;
     public final String suffix;
 
-    Timescale(long multiplier, String suffix) {
-        this.multiplier = multiplier;
+    Timescale(String suffix) {
         this.suffix = suffix;
     }
 

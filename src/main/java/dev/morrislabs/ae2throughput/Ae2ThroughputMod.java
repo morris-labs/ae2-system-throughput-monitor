@@ -1,9 +1,15 @@
 package dev.morrislabs.ae2throughput;
 
+import appeng.api.parts.PartModels;
+
+import net.neoforged.neoforge.common.NeoForge;
+
+import dev.morrislabs.ae2throughput.command.ModCommands;
 import dev.morrislabs.ae2throughput.config.ThroughputConfig;
 import dev.morrislabs.ae2throughput.datagen.DataGenerators;
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
 import dev.morrislabs.ae2throughput.network.ModNetwork;
+import dev.morrislabs.ae2throughput.part.ThroughputMonitorPart;
 import dev.morrislabs.ae2throughput.registry.ModCreativeTabs;
 import dev.morrislabs.ae2throughput.registry.ModParts;
 import dev.morrislabs.ae2throughput.screen.ClientEventHandlers;
@@ -30,6 +36,11 @@ public final class Ae2ThroughputMod {
             modEventBus.addListener(ClientEventHandlers::registerScreens);
         }
         ThroughputMonitorMenu.ensureRegistered();
+        NeoForge.EVENT_BUS.addListener(ModCommands::register);
+        // Register part model location with AE2 before ModelEvent.RegisterAdditional fires.
+        // AE2 calls PartModelsInternal.freeze() during that event and then registers all
+        // collected locations with Minecraft's model bakery.
+        PartModels.registerModels(ThroughputMonitorPart.MODEL.getModels());
     }
 
     public static ResourceLocation makeId(String path) {
