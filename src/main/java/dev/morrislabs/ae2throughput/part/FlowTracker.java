@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import appeng.api.stacks.AEKey;
 
@@ -46,10 +45,12 @@ public class FlowTracker {
     private final Map<AEKey, Long> pendingNetworkExtracted = new HashMap<>();
 
     /**
-     * Keys whose first watcher event this period arrived without a baseline. The watcher delta
-     * for these keys is unknown, so {@link #pushSample} does not infer voided items for them.
+     * Keys whose first watcher event this period arrived without a baseline, mapped to the
+     * network insert and extract totals at that event. The first event's amount already
+     * includes earlier transfers, so {@link #pushSample} infers voided items only from
+     * transfers after it.
      */
-    private final Set<AEKey> unbaselined = new java.util.HashSet<>();
+    private final Map<AEKey, long[]> unbaselined = new HashMap<>();
 
     /**
      * True when {@link #lastSeen} holds a full snapshot of the grid inventory, so a key absent
@@ -78,8 +79,11 @@ public class FlowTracker {
             prev = 0L;
         }
         if (prev == null) {
-            // First observation: no baseline to diff against, so this period's delta is unknown.
-            unbaselined.add(what);
+            // First observation: it becomes the baseline. Record the transfer totals so far,
+            // because the watcher delta for those transfers is unknown.
+            unbaselined.put(what, new long[] {
+                    pendingNetworkInserted.getOrDefault(what, 0L),
+                    pendingNetworkExtracted.getOrDefault(what, 0L)});
             return;
         }
         if (newAmount > prev) {
@@ -121,9 +125,9 @@ public class FlowTracker {
             long watcherFall = acc != null ? acc[1] : 0;
             long networkInserted = pendingNetworkInserted.getOrDefault(key, 0L);
             long networkExtracted = pendingNetworkExtracted.getOrDefault(key, 0L);
-            long voided = unbaselined.contains(key)
-                    ? 0
-                    : computeVoided(watcherRise, watcherFall, networkInserted, networkExtracted);
+            long[] offset = unbaselined.getOrDefault(key, new long[2]);
+            long voided = computeVoided(watcherRise, watcherFall,
+                    networkInserted - offset[0], networkExtracted - offset[1]);
             // The watcher sees only net per-tick change; gross insert and extract counts
             // recover flow that cancels out within one tick.
             long produced = Math.max(watcherRise, networkInserted - voided);
