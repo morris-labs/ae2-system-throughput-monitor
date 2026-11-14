@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8.3",
+  "package": "dev.morrislabs.ae2throughput.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "NetworkStorageMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

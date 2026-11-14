@@ -31,7 +31,14 @@ public class FlowTracker {
     /** Accumulated produced/consumed since the last {@link #pushSample} call. Index 0 = produced, 1 = consumed. */
     private final Map<AEKey, long[]> pending = new HashMap<>();
 
-    /** Circular buffer of [produced, consumed] pairs per key. */
+    /**
+     * Total items inserted into the network storage layer per key since the last {@link #pushSample}
+     * call, as reported by the {@link dev.morrislabs.ae2throughput.mixin.NetworkStorageMixin}.
+     * Includes both items that reached real storage and items accepted by void cells.
+     */
+    private final Map<AEKey, Long> pendingNetworkInserted = new HashMap<>();
+
+    /** Circular buffer of [produced, consumed, voided] triples per key. */
     private final Map<AEKey, long[][]> windows = new HashMap<>();
 
     /** Current write head per key in the circular buffer. */
@@ -61,6 +68,15 @@ public class FlowTracker {
     }
 
     /**
+     * Called by {@link dev.morrislabs.ae2throughput.mixin.NetworkStorageMixin} when items enter
+     * the network storage layer. This fires before void cells silently discard items, so the
+     * difference between this total and the watcher's positive delta reveals the voided amount.
+     */
+    public void onNetworkInsert(AEKey what, long amount) {
+        pendingNetworkInserted.merge(what, amount, Long::sum);
+    }
+
+    /**
      * Commits the accumulated deltas into the rolling window and clears the pending
      * accumulators. Call this once per sample period.
      */
@@ -70,15 +86,20 @@ public class FlowTracker {
             long[] acc = pending.get(key);
             long produced = acc != null ? acc[0] : 0;
             long consumed = acc != null ? acc[1] : 0;
+            long networkInserted = pendingNetworkInserted.getOrDefault(key, 0L);
+            // Items accepted by the storage layer but not retained in real storage are voided.
+            long voided = Math.max(0, networkInserted - produced);
 
-            long[][] window = windows.computeIfAbsent(key, k -> new long[windowSize][2]);
+            long[][] window = windows.computeIfAbsent(key, k -> new long[windowSize][3]);
             int head = heads.getOrDefault(key, 0);
             window[head][0] = produced;
             window[head][1] = consumed;
+            window[head][2] = voided;
             heads.put(key, (head + 1) % windowSize);
         }
 
         pending.clear();
+        pendingNetworkInserted.clear();
         dirty = true;
 
         // Prune keys whose window has gone entirely to zero (flow stopped long enough ago).
@@ -91,7 +112,7 @@ public class FlowTracker {
             long[][] window = entry.getValue();
             boolean anyNonZero = false;
             for (long[] sample : window) {
-                if (sample[0] != 0 || sample[1] != 0) {
+                if (sample[0] != 0 || sample[1] != 0 || sample[2] != 0) {
                     anyNonZero = true;
                     break;
                 }
@@ -118,12 +139,14 @@ public class FlowTracker {
             long[][] window = entry.getValue();
             long totalProduced = 0;
             long totalConsumed = 0;
+            long totalVoided = 0;
             for (long[] sample : window) {
                 totalProduced += sample[0];
                 totalConsumed += sample[1];
+                totalVoided += sample[2];
             }
-            if (totalProduced > 0 || totalConsumed > 0) {
-                result.put(entry.getKey(), new FlowSample(totalProduced, totalConsumed));
+            if (totalProduced > 0 || totalConsumed > 0 || totalVoided > 0) {
+                result.put(entry.getKey(), new FlowSample(totalProduced, totalConsumed, totalVoided));
             }
         }
         return result;
@@ -133,10 +156,9 @@ public class FlowTracker {
     private Iterable<AEKey> allTrackedKeys() {
         // Defensive copies prevent ConcurrentModificationException if pushSample() modifies
         // the maps while iterating (for example, computeIfAbsent adding a new window entry).
-        if (windows.isEmpty()) return Set.copyOf(pending.keySet());
-        if (pending.isEmpty()) return Set.copyOf(windows.keySet());
         var all = new java.util.HashSet<AEKey>(windows.keySet());
         all.addAll(pending.keySet());
+        all.addAll(pendingNetworkInserted.keySet());
         return all;
     }
 
@@ -162,6 +184,7 @@ public class FlowTracker {
     public void resetBaseline() {
         lastSeen.clear();
         pending.clear();
+        pendingNetworkInserted.clear();
     }
 
     /**

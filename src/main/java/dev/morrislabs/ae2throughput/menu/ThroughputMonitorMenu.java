@@ -108,7 +108,8 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
                 for (var e : averages.entrySet()) {
                     long produced = Math.round(e.getValue().totalProduced() * toTenthsPerSec);
                     long consumed = Math.round(e.getValue().totalConsumed() * toTenthsPerSec);
-                    entries.add(new ThroughputUpdatePayload.Entry(e.getKey(), produced, consumed));
+                    long voided  = Math.round(e.getValue().totalVoided()   * toTenthsPerSec);
+                    entries.add(new ThroughputUpdatePayload.Entry(e.getKey(), produced, consumed, voided));
                 }
 
                 PacketDistributor.sendToPlayer(serverPlayer, new ThroughputUpdatePayload(

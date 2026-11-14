@@ -23,8 +23,8 @@ public record ThroughputUpdatePayload(
         int samplePeriodTicks
 ) implements CustomPacketPayload {
 
-    /** One key's produce/consume rates in tenths of an item per second. */
-    public record Entry(AEKey key, long produced, long consumed) {}
+    /** One key's produce/consume/void rates in tenths of an item per second. */
+    public record Entry(AEKey key, long produced, long consumed, long voided) {}
 
     public static final Type<ThroughputUpdatePayload> TYPE =
             new Type<>(Ae2ThroughputMod.makeId("throughput_update"));
@@ -39,10 +39,11 @@ public record ThroughputUpdatePayload(
             var key = AEKey.readKey(buf);
             long produced = buf.readVarLong();
             long consumed = buf.readVarLong();
+            long voided = buf.readVarLong();
             // key is null when the serialized key type is no longer registered (e.g. after a mod
             // update). Skip the entry rather than storing a null that causes an NPE in the renderer.
             if (key != null) {
-                entries.add(new Entry(key, produced, consumed));
+                entries.add(new Entry(key, produced, consumed, voided));
             }
         }
         int timescaleOrd = buf.readUnsignedByte();
@@ -57,6 +58,7 @@ public record ThroughputUpdatePayload(
             AEKey.writeKey(buf, e.key());
             buf.writeVarLong(e.produced());
             buf.writeVarLong(e.consumed());
+            buf.writeVarLong(e.voided());
         }
         buf.writeByte(timescaleOrdinal);
         buf.writeVarInt(windowSize);

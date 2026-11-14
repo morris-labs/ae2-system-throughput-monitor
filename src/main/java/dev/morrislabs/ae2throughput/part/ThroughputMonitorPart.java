@@ -6,8 +6,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 
 import appeng.api.networking.GridFlags;
+import appeng.api.networking.IGrid;
 import appeng.api.networking.IGridNode;
+import appeng.api.networking.IGridNodeListener;
 import appeng.api.networking.IStackWatcher;
+import appeng.api.networking.security.IActionSource;
+import appeng.api.networking.storage.IStorageService;
 import appeng.api.networking.storage.IStorageWatcherNode;
 import appeng.api.networking.ticking.IGridTickable;
 import appeng.api.networking.ticking.TickRateModulation;
@@ -16,6 +20,7 @@ import appeng.api.parts.IPartCollisionHelper;
 import appeng.api.parts.IPartItem;
 import appeng.api.parts.IPartModel;
 import appeng.api.stacks.AEKey;
+import appeng.api.storage.MEStorage;
 import appeng.menu.MenuOpener;
 import appeng.menu.locator.MenuLocators;
 import appeng.parts.AEBasePart;
@@ -24,12 +29,13 @@ import appeng.parts.PartModel;
 import dev.morrislabs.ae2throughput.Ae2ThroughputMod;
 import dev.morrislabs.ae2throughput.config.ThroughputConfig;
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
+import dev.morrislabs.ae2throughput.mixin.INetworkStorageHook;
 
 /**
  * Cable-face part that tracks every item flowing through the attached AE2 network
  * and accumulates produce/consume rates using a rolling average window.
  */
-public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
+public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, IFlowListener {
 
     public static final IPartModel MODEL = new PartModel(
             Ae2ThroughputMod.makeId("part/throughput_monitor"));
@@ -45,6 +51,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
     private int samplePeriodTicks;
     private Timescale timescale = Timescale.PER_SECOND;
     private int tickCounter = 0;
+    private INetworkStorageHook registeredHook = null;
 
     public ThroughputMonitorPart(IPartItem<?> partItem) {
         super(partItem);
@@ -71,6 +78,54 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable {
                         tracker.onStackChange(what, amount);
                     }
                 });
+    }
+
+    // --- IFlowListener ---
+
+    @Override
+    public void onNetworkInsert(AEKey what, long amount, IActionSource src) {
+        tracker.onNetworkInsert(what, amount);
+    }
+
+    @Override
+    public void onNetworkExtract(AEKey what, long amount, IActionSource src) {
+        // No-op; reserved for source attribution in a future release.
+    }
+
+    // --- Grid lifecycle ---
+
+    @Override
+    protected void onMainNodeStateChanged(IGridNodeListener.State reason) {
+        super.onMainNodeStateChanged(reason);
+        if (getMainNode().isActive()) {
+            registerFlowListener();
+        } else {
+            unregisterFlowListener();
+        }
+    }
+
+    @Override
+    public void removeFromWorld() {
+        unregisterFlowListener();
+        super.removeFromWorld();
+    }
+
+    private void registerFlowListener() {
+        IGrid grid = getMainNode().getGrid();
+        if (grid == null) return;
+        MEStorage storage = grid.getService(IStorageService.class).getInventory();
+        if (!(storage instanceof INetworkStorageHook hook)) return;
+        if (registeredHook == hook) return;
+        unregisterFlowListener();
+        hook.addFlowListener(this);
+        registeredHook = hook;
+    }
+
+    private void unregisterFlowListener() {
+        if (registeredHook != null) {
+            registeredHook.removeFlowListener(this);
+            registeredHook = null;
+        }
     }
 
     // --- IGridTickable ---

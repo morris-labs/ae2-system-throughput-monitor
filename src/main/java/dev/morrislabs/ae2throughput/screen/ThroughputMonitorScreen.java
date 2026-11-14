@@ -1,5 +1,6 @@
 package dev.morrislabs.ae2throughput.screen;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -10,6 +11,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 
 import appeng.api.client.AEKeyRendering;
@@ -48,6 +50,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     private static final int COLOR_ROW_ALT  = 0x18FFFFFF;
     private static final int COLOR_PRODUCED = 0xFF55FF55;
     private static final int COLOR_CONSUMED = 0xFFFF5555;
+    private static final int COLOR_VOIDED   = 0xFFFF8800;
     private static final int COLOR_TEXT     = 0xFFE0E0E0;
     private static final int COLOR_DIM      = 0xFF888888;
     private static final int COLOR_SCROLL   = 0xFF556699;
@@ -210,9 +213,29 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 gg.drawString(font, cons, tx, rowY + 12, COLOR_CONSUMED, false);
             }
 
-            if (mouseX >= rowX + 2 && mouseX < rowX + 18
-                    && mouseY >= rowY + 2 && mouseY < rowY + 18) {
-                setTooltipForNextRenderPass(entry.key().getDisplayName());
+            if (mouseX >= rowX && mouseX < rowX + LIST_W - SCROLL_W
+                    && mouseY >= rowY && mouseY < rowY + ROW_H) {
+                var tips = new ArrayList<FormattedCharSequence>();
+                tips.add(entry.key().getDisplayName().getVisualOrderText());
+                if (entry.produced() > 0) {
+                    tips.add(Component.literal(
+                            "+" + formatRate(entry.produced(), timescale) + timescale.suffix + " produced")
+                            .withStyle(s -> s.withColor(COLOR_PRODUCED & 0xFFFFFF))
+                            .getVisualOrderText());
+                }
+                if (entry.consumed() > 0) {
+                    tips.add(Component.literal(
+                            "-" + formatRate(entry.consumed(), timescale) + timescale.suffix + " consumed")
+                            .withStyle(s -> s.withColor(COLOR_CONSUMED & 0xFFFFFF))
+                            .getVisualOrderText());
+                }
+                if (entry.voided() > 0) {
+                    tips.add(Component.literal(
+                            "~" + formatRate(entry.voided(), timescale) + timescale.suffix + " voided")
+                            .withStyle(s -> s.withColor(COLOR_VOIDED & 0xFFFFFF))
+                            .getVisualOrderText());
+                }
+                setTooltipForNextRenderPass(tips);
             }
         }
     }
@@ -296,7 +319,7 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
                 .filter(e -> switch (filter) {
                     case ALL -> true;
                     case PRODUCING -> e.produced() > 0;
-                    case CONSUMING -> e.consumed() > 0;
+                    case CONSUMING -> e.consumed() > 0 || e.voided() > 0;
                 })
                 .filter(e -> query.isEmpty()
                         || e.key().getDisplayName().getString().toLowerCase(Locale.ROOT).contains(query))
