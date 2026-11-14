@@ -51,6 +51,12 @@ public class FlowTracker {
      */
     private final Set<AEKey> unbaselined = new java.util.HashSet<>();
 
+    /**
+     * True when {@link #lastSeen} holds a full snapshot of the grid inventory, so a key absent
+     * from it has a known amount of zero rather than an unknown amount.
+     */
+    private boolean baselineComplete = false;
+
     /** Circular buffer of [produced, consumed, voided] triples per key. */
     private final Map<AEKey, long[][]> windows = new HashMap<>();
 
@@ -68,6 +74,9 @@ public class FlowTracker {
      */
     public void onStackChange(AEKey what, long newAmount) {
         Long prev = lastSeen.put(what, newAmount);
+        if (prev == null && baselineComplete) {
+            prev = 0L;
+        }
         if (prev == null) {
             // First observation: no baseline to diff against, so this period's delta is unknown.
             unbaselined.add(what);
@@ -224,16 +233,21 @@ public class FlowTracker {
     }
 
     /**
-     * Clears the per-key baseline so the next {@link #onStackChange} callbacks after a grid
-     * reconnect are treated as first observations rather than spurious spikes.
-     * Leaves existing window data intact.
+     * Replaces the per-key baseline after the part joins a grid. Pass the new grid's cached
+     * inventory, which is the state that AE2 diffs its next watcher callbacks against. AE2 does
+     * not replay existing stock to a registered watcher, so keys absent from the snapshot have
+     * a known amount of zero. Pass {@code null} when no snapshot is available; the next
+     * callback for each key is then a first observation.
+     *
+     * <p>Keeps the counts accumulated this period, because they describe real transfers on the
+     * previous grid. Leaves existing window data intact.
      */
-    public void resetBaseline() {
+    public void resetBaseline(Map<AEKey, Long> snapshot) {
         lastSeen.clear();
-        pending.clear();
-        pendingNetworkInserted.clear();
-        pendingNetworkExtracted.clear();
-        unbaselined.clear();
+        baselineComplete = snapshot != null;
+        if (snapshot != null) {
+            lastSeen.putAll(snapshot);
+        }
     }
 
     /**

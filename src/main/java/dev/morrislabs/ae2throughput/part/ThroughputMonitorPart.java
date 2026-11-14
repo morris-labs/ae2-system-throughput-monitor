@@ -1,5 +1,8 @@
 package dev.morrislabs.ae2throughput.part;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
@@ -66,10 +69,10 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
                 .addService(IStorageWatcherNode.class, new IStorageWatcherNode() {
                     @Override
                     public void updateWatcher(IStackWatcher newWatcher) {
-                        // Clear stale baseline before AE2 replays the full network state.
-                        // Without this, the diff against old lastSeen values would produce
-                        // spurious spikes when the network reconnects after a split or reload.
-                        tracker.resetBaseline();
+                        // AE2 diffs the next callbacks against the new grid's cached
+                        // inventory, so use that snapshot as the baseline. Diffing against
+                        // the old grid's amounts would produce spurious spikes.
+                        tracker.resetBaseline(snapshotInventory());
                         newWatcher.setWatchAll(true);
                     }
 
@@ -78,6 +81,17 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
                         tracker.onStackChange(what, amount);
                     }
                 });
+    }
+
+    /** Returns the cached inventory of the grid this part belongs to, or null without a grid. */
+    private Map<AEKey, Long> snapshotInventory() {
+        IGrid grid = getMainNode().getGrid();
+        if (grid == null) return null;
+        Map<AEKey, Long> snapshot = new HashMap<>();
+        for (var entry : grid.getService(IStorageService.class).getCachedInventory()) {
+            snapshot.put(entry.getKey(), entry.getLongValue());
+        }
+        return snapshot;
     }
 
     // --- IFlowListener ---
