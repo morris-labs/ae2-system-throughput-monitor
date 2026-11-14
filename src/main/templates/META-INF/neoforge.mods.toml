@@ -1,10 +1,11 @@
 modLoader="javafml"
 loaderVersion="[4,)"
 
-[[mixins]]
-config="${mod_id}.mixins.json"
 license="${mod_license}"
 issueTrackerURL="${mod_issue_tracker}"
+
+[[mixins]]
+config="${mod_id}.mixins.json"
 
 [[mods]]
 modId="${mod_id}"
