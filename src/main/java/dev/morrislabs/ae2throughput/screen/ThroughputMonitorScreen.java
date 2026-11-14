@@ -14,6 +14,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 
+import org.lwjgl.glfw.GLFW;
+
 import appeng.api.client.AEKeyRendering;
 
 import dev.morrislabs.ae2throughput.menu.ThroughputMonitorMenu;
@@ -286,6 +288,19 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
     @Override
     protected void renderLabels(GuiGraphics gg, int mouseX, int mouseY) {}
 
+    /**
+     * Sends keys to the focused search box first so that typing the inventory key, such as E,
+     * edits the search text instead of closing the screen. Escape still closes the screen.
+     */
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode != GLFW.GLFW_KEY_ESCAPE && searchBox != null && searchBox.canConsumeInput()) {
+            searchBox.keyPressed(keyCode, scanCode, modifiers);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         int maxScroll = Math.max(0, filteredCache.size() - VISIBLE_ROWS);
@@ -352,9 +367,9 @@ public class ThroughputMonitorScreen extends AbstractContainerScreen<ThroughputM
      */
     private static String formatRateTick(long tenths) {
         long thou = tenths * 5L; // thousandths of items per tick
-        if (thou >= 1_000_000_000L) return (thou / 1_000_000_000L) + "G";
-        if (thou >= 1_000_000L)     return (thou / 1_000_000L) + "M";
-        if (thou >= 1_000_000L)     return (thou / 1_000_000L) + "M";
+        if (thou >= 1_000_000_000_000L) return (thou / 1_000_000_000_000L) + "G";
+        if (thou >= 1_000_000_000L)     return (thou / 1_000_000_000L) + "M";
+        if (thou >= 1_000_000L)         return (thou / 1_000_000L) + "k";
         if (thou >= 1_000L)         return (thou / 1_000L) + "." + ((thou % 1_000L) / 100L);
         // Below 1/t: show three decimal places (e.g. 0.075)
         return "0." + String.format("%03d", thou);
