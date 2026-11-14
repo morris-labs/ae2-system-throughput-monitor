@@ -11,7 +11,8 @@ import appeng.api.stacks.AEKey;
 /**
  * Tracks per-key produce/consume flow over a rolling window of samples.
  *
- * <p>Call {@link #onStackChange} on every storage-watcher callback. Call {@link #pushSample}
+ * <p>Call {@link #onStackChange} on every storage-watcher callback, and {@link #onNetworkInsert}
+ * and {@link #onNetworkExtract} on every network storage transfer. Call {@link #pushSample}
  * once per sample period to commit the accumulated deltas into the rolling window. Call
  * {@link #getAverages} to read the current smoothed rates.
  *
@@ -22,8 +23,11 @@ public class FlowTracker {
 
     private int windowSize;
 
-    /** Set to {@code true} after each {@link #pushSample} call; cleared by {@link #isDirtyAndClear}. */
-    private boolean dirty = true;
+    /**
+     * Increments whenever the data or settings that viewers display change. Each viewer keeps
+     * its own last-sent value, so one viewer's update never hides a change from another.
+     */
+    private long version = 0;
 
     /** Last amount observed for each key. Keys absent here are first-time observations. */
     private final Map<AEKey, Long> lastSeen = new HashMap<>();
@@ -37,6 +41,15 @@ public class FlowTracker {
      * Includes both items that reached real storage and items accepted by void cells.
      */
     private final Map<AEKey, Long> pendingNetworkInserted = new HashMap<>();
+
+    /** Total items extracted from the network storage layer per key since the last {@link #pushSample}. */
+    private final Map<AEKey, Long> pendingNetworkExtracted = new HashMap<>();
+
+    /**
+     * Keys whose first watcher event this period arrived without a baseline. The watcher delta
+     * for these keys is unknown, so {@link #pushSample} does not infer voided items for them.
+     */
+    private final Set<AEKey> unbaselined = new java.util.HashSet<>();
 
     /** Circular buffer of [produced, consumed, voided] triples per key. */
     private final Map<AEKey, long[][]> windows = new HashMap<>();
@@ -56,7 +69,9 @@ public class FlowTracker {
     public void onStackChange(AEKey what, long newAmount) {
         Long prev = lastSeen.put(what, newAmount);
         if (prev == null) {
-            return; // First observation -- no baseline to diff against.
+            // First observation: no baseline to diff against, so this period's delta is unknown.
+            unbaselined.add(what);
+            return;
         }
         if (newAmount > prev) {
             long[] acc = pending.computeIfAbsent(what, k -> new long[2]);
@@ -77,6 +92,15 @@ public class FlowTracker {
     }
 
     /**
+     * Called by {@link dev.morrislabs.ae2throughput.mixin.NetworkStorageMixin} when items leave
+     * the network storage layer. The watcher reports only net per-tick changes, so this gross
+     * count reveals items inserted and extracted within the same tick.
+     */
+    public void onNetworkExtract(AEKey what, long amount) {
+        pendingNetworkExtracted.merge(what, amount, Long::sum);
+    }
+
+    /**
      * Commits the accumulated deltas into the rolling window and clears the pending
      * accumulators. Call this once per sample period.
      */
@@ -84,11 +108,17 @@ public class FlowTracker {
         // Write accumulated data (or zeros for keys already in a window but idle this period).
         for (AEKey key : allTrackedKeys()) {
             long[] acc = pending.get(key);
-            long produced = acc != null ? acc[0] : 0;
-            long consumed = acc != null ? acc[1] : 0;
+            long watcherRise = acc != null ? acc[0] : 0;
+            long watcherFall = acc != null ? acc[1] : 0;
             long networkInserted = pendingNetworkInserted.getOrDefault(key, 0L);
-            // Items accepted by the storage layer but not retained in real storage are voided.
-            long voided = Math.max(0, networkInserted - produced);
+            long networkExtracted = pendingNetworkExtracted.getOrDefault(key, 0L);
+            long voided = unbaselined.contains(key)
+                    ? 0
+                    : computeVoided(watcherRise, watcherFall, networkInserted, networkExtracted);
+            // The watcher sees only net per-tick change; gross insert and extract counts
+            // recover flow that cancels out within one tick.
+            long produced = Math.max(watcherRise, networkInserted - voided);
+            long consumed = Math.max(watcherFall, networkExtracted);
 
             long[][] window = windows.computeIfAbsent(key, k -> new long[windowSize][3]);
             int head = heads.getOrDefault(key, 0);
@@ -100,10 +130,23 @@ public class FlowTracker {
 
         pending.clear();
         pendingNetworkInserted.clear();
-        dirty = true;
+        pendingNetworkExtracted.clear();
+        unbaselined.clear();
+        version++;
 
         // Prune keys whose window has gone entirely to zero (flow stopped long enough ago).
         pruneZeroWindows();
+    }
+
+    /**
+     * Returns the items accepted by the storage layer but not retained in real storage.
+     * Extractions that the watcher did not see as a fall offset inserts that the watcher did
+     * not see as a rise, which covers same-tick pass-through. Watcher falls without a matching
+     * extract come from outside the network, such as a storage bus, and never count as voided.
+     */
+    static long computeVoided(long watcherRise, long watcherFall, long networkInserted, long networkExtracted) {
+        long hiddenExtract = Math.max(0, networkExtracted - watcherFall);
+        return Math.max(0, networkInserted - watcherRise - hiddenExtract);
     }
 
     private void pruneZeroWindows() {
@@ -159,6 +202,7 @@ public class FlowTracker {
         var all = new java.util.HashSet<AEKey>(windows.keySet());
         all.addAll(pending.keySet());
         all.addAll(pendingNetworkInserted.keySet());
+        all.addAll(pendingNetworkExtracted.keySet());
         return all;
     }
 
@@ -167,13 +211,16 @@ public class FlowTracker {
     }
 
     /**
-     * Returns {@code true} if {@link #pushSample} has run since the last call, then resets the flag.
-     * Use this to skip network packets when the tracker data has not changed.
+     * Returns a counter that changes whenever displayed data or settings change. Compare it with
+     * the value from the last packet to skip network packets when nothing changed.
      */
-    public boolean isDirtyAndClear() {
-        boolean was = dirty;
-        dirty = false;
-        return was;
+    public long getVersion() {
+        return version;
+    }
+
+    /** Records a settings change that viewers must receive. */
+    public void markChanged() {
+        version++;
     }
 
     /**
@@ -185,6 +232,8 @@ public class FlowTracker {
         lastSeen.clear();
         pending.clear();
         pendingNetworkInserted.clear();
+        pendingNetworkExtracted.clear();
+        unbaselined.clear();
     }
 
     /**
@@ -197,5 +246,6 @@ public class FlowTracker {
         this.windowSize = Math.max(1, Math.min(300, newSize));
         windows.clear();
         heads.clear();
+        version++;
     }
 }

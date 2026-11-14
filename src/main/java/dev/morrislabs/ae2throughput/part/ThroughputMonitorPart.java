@@ -89,7 +89,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
 
     @Override
     public void onNetworkExtract(AEKey what, long amount, IActionSource src) {
-        // No-op; reserved for source attribution in a future release.
+        tracker.onNetworkExtract(what, amount);
     }
 
     // --- Grid lifecycle ---
@@ -207,6 +207,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
 
     public void setSamplePeriodTicks(int ticks) {
         this.samplePeriodTicks = Math.max(MIN_PERIOD, Math.min(MAX_PERIOD, ticks));
+        tracker.markChanged();
     }
 
     public Timescale getTimescale() {
@@ -215,6 +216,7 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
 
     public void cycleTimescale() {
         this.timescale = timescale.next();
+        tracker.markChanged();
     }
 
     /**
@@ -229,5 +231,8 @@ public class ThroughputMonitorPart extends AEBasePart implements IGridTickable, 
                 Math.min(MAX_WINDOW, totalTicks / period));
         tracker.setWindowSize(window);
         setSamplePeriodTicks(period);
+        if (getHost() != null) {
+            getHost().markForSave();
+        }
     }
 }

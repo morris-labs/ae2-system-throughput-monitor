@@ -29,8 +29,8 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
     private static final String ACTION_ADJUST_WINDOW   = "adjust_window";
 
     private final ThroughputMonitorPart part;
-    /** Becomes {@code true} whenever a player action changes a setting; triggers immediate resend. */
-    private boolean settingsDirty = true;
+    /** Tracker version in the last packet sent to this viewer; {@code -1} forces the first send. */
+    private long lastSentVersion = -1;
 
     public ThroughputMonitorMenu(int containerId, Inventory playerInventory, ThroughputMonitorPart part) {
         super(TYPE, containerId, playerInventory, part);
@@ -45,19 +45,16 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
 
     private void doCycleTimescale() {
         part.cycleTimescale();
-        settingsDirty = true;
         saveChanges();
     }
 
     private void doAdjustPeriod(Integer delta) {
         part.setSamplePeriodTicks(part.getSamplePeriodTicks() + delta);
-        settingsDirty = true;
         saveChanges();
     }
 
     private void doAdjustWindow(Integer delta) {
         part.getTracker().setWindowSize(part.getTracker().getWindowSize() + delta);
-        settingsDirty = true;
         saveChanges();
     }
 
@@ -93,9 +90,9 @@ public class ThroughputMonitorMenu extends AEBaseMenu {
     public void broadcastChanges() {
         if (isServerSide() && getPlayer() instanceof ServerPlayer serverPlayer) {
             var tracker = part.getTracker();
-            boolean trackerChanged = tracker.isDirtyAndClear();
-            if (trackerChanged || settingsDirty) {
-                settingsDirty = false;
+            long version = tracker.getVersion();
+            if (version != lastSentVersion) {
+                lastSentVersion = version;
                 int periodTicks = part.getSamplePeriodTicks();
                 int windowSize  = tracker.getWindowSize();
                 // Scale factor: tenths-of-items per second, preserving fractional flow.
