@@ -53,8 +53,9 @@ public class FlowTracker {
     private final Map<AEKey, long[]> unbaselined = new HashMap<>();
 
     /**
-     * True when {@link #lastSeen} holds a full snapshot of the grid inventory, so a key absent
-     * from it has a known amount of zero rather than an unknown amount.
+     * True when {@link #lastSeen} holds a full snapshot of the grid inventory. A key absent
+     * from it rises from zero only by the amount that network inserts explain; storage that
+     * mounts later adds its stock to the baseline instead of counting it as produced.
      */
     private boolean baselineComplete = false;
 
@@ -76,7 +77,13 @@ public class FlowTracker {
     public void onStackChange(AEKey what, long newAmount) {
         Long prev = lastSeen.put(what, newAmount);
         if (prev == null && baselineComplete) {
-            prev = 0L;
+            // Absent from a full snapshot, the key held no stock reachable through the
+            // network. Only the net network insert this period explains the rise; the rest
+            // is stock that became visible without a transfer, such as a mounted cell, a
+            // loaded drive, a storage bus, or a merged grid, and becomes the baseline.
+            long netInserted = pendingNetworkInserted.getOrDefault(what, 0L)
+                    - pendingNetworkExtracted.getOrDefault(what, 0L);
+            prev = Math.max(0, newAmount - Math.max(0, netInserted));
         }
         if (prev == null) {
             // First observation: it becomes the baseline. Record the transfer totals so far,
@@ -239,8 +246,9 @@ public class FlowTracker {
     /**
      * Replaces the per-key baseline after the part joins a grid. Pass the new grid's cached
      * inventory, which is the state that AE2 diffs its next watcher callbacks against. AE2 does
-     * not replay existing stock to a registered watcher, so keys absent from the snapshot have
-     * a known amount of zero. Pass {@code null} when no snapshot is available; the next
+     * not replay existing stock to a registered watcher, but storage can mount after the
+     * snapshot, so a key absent from it counts as produced only up to its net network insert.
+     * Pass {@code null} when no snapshot is available; the next
      * callback for each key is then a first observation.
      *
      * <p>Keeps the counts accumulated this period, because they describe real transfers on the
